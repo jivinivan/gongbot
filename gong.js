@@ -1,87 +1,82 @@
-'use strict';
+import piblaster from 'pi-blaster.js'
+import Q from 'q'
 
-// Include required dependencies
-var piblaster = require('pi-blaster.js');
-var Q = require('q');
+// Settings
+const servoTimePer60Degrees = 155 // milliseconds
+const servo0 = 0.05
+const servo180 = 0.25
+const servoDegreePulse = (servo180-servo0) / 180
+const servoDegreeTime = servoTimePer60Degrees / 60 //milliseconds
+const incrementDivisor = 0.001
+const pin = 18
 
-// Defaults
-var servoTimePer60Degrees = 155; //milliseconds
-var servo0 = 0.05;
-var servo180 = 0.25;
-var servoDegreePulse = (servo180-servo0) / 180;
-var servoDegreeTime = servoTimePer60Degrees / 60; //milliseconds
-var incrementDivisor = 0.001;
-var pin = 18;
+const _move = (start, stop, delayCount, delayTime, granularity, direction, deferred) => {
 
-
-var _move = function(start, stop, delayCount, delayTime, granularity, direction, deferred) {
-
-  // Go to next position
-  var pwm;
-
+  // Determin next position
+  let pwm
   if(direction === 'up') {
-    pwm = (parseFloat(start)+parseFloat(granularity));
-    pwm = (pwm > stop) ? stop : pwm;
+    pwm = (parseFloat(start) + parseFloat(granularity))
+    pwm = (pwm > stop) ? stop : pwm
   }else{
-    pwm = (parseFloat(start)-parseFloat(granularity));
-    pwm = (pwm < stop) ? stop : pwm;
+    pwm = (parseFloat(start) - parseFloat(granularity))
+    pwm = (pwm < stop) ? stop : pwm
   }
 
-  // Set position
-  piblaster.setPwm(pin, pwm);
-  console.log('moving to: '+pwm);
+  // Set next position
+  piblaster.setPwm(pin, pwm)
+  console.log('position', pwm)
 
-  // Wait for next position
-  setTimeout(function(){
-    if(pwm === stop) {
-      deferred.resolve();
-    }else{
-      // Keep iterating if we haven't reached the iteration limit
-      return _move(pwm, stop, delayCount, delayTime, granularity, direction, deferred);
+  // Wait for servo to reach next position position
+  setTimeout(() => {
+    if (pwm === stop) {
+      deferred.resolve()
     }
-  },delayTime);
-};
-
-var gong = function(start, stop, time) {
-
-  var degrees = Math.abs(start-stop) / servoDegreePulse; // total degrees of movement
-  var degreeTime = time / degrees; // time per degree
-  var extraTime = 2000 - (servoDegreeTime*degrees); // extra time past max servo speed
-  var delayCount = Math.ceil( Math.abs(start-stop) / incrementDivisor ); // number of delays to use
-  var delayTime = extraTime / delayCount; // delay time
-  var granularity = Math.abs(start-stop) / delayCount;
-  var direction = (start > stop) ? 'down' : 'up';
-  var deferred = Q.defer();
-
-  console.log('going '+direction);
-
-  if(degreeTime > servoDegreeTime) {
-    console.log('using delays');
-
-    // Go to position 1
-    piblaster.setPwm(pin, start);
-
-    // Start delay sequence
-    _move(start, stop, delayCount, delayTime, granularity, direction, deferred);
-  }else{
-    console.log('full speed ahead!');
-
-    // Go to position 1
-    piblaster.setPwm(pin, start);
-
-    // Go to position 2
-    piblaster.setPwm(pin, stop);
-
-    // Calculate the time it will take for full speed position change
-    var fullSpeedTime = (degrees*servoDegreeTime);
-    setTimeout(function(){
-      deferred.resolve();
-    },fullSpeedTime);
-  }
-
-  return deferred.promise;
+    else {
+      // Keep iterating if we haven't reached the iteration limit
+      return _move(pwm, stop, delayCount, delayTime, granularity, direction, deferred)
+    }
+  }, delayTime)
 }
 
-module.exports = {
-  gong: gong
-};
+const gong = (start, stop, time) => {
+
+  const degrees = Math.abs(start-stop) / servoDegreePulse // total degrees of movement
+  const degreeTime = time / degrees // time per degree
+  const extraTime = 2000 - (servoDegreeTime * degrees) // extra time past max servo speed
+  const delayCount = Math.ceil( Math.abs(start-stop) / incrementDivisor ) // number of delays to use
+  const delayTime = extraTime / delayCount // delay time
+  const granularity = Math.abs(start-stop) / delayCount
+  const direction = (start > stop) ? 'down' : 'up'
+  const deferred = Q.defer()
+
+  console.log('direction', direction)
+
+  if(degreeTime > servoDegreeTime) {
+    console.log('using delays')
+
+    // Go to position 1
+    piblaster.setPwm(pin, start)
+
+    // Start delay sequence
+    _move(start, stop, delayCount, delayTime, granularity, direction, deferred)
+  }
+  else {
+    console.log('full speed ahead!')
+
+    // Go to position 1
+    piblaster.setPwm(pin, start)
+
+    // Go to position 2
+    piblaster.setPwm(pin, stop)
+
+    // Calculate the time it will take for full speed position change
+    var fullSpeedTime = (degrees * servoDegreeTime)
+    setTimeout(() => {
+      deferred.resolve()
+    }, fullSpeedTime)
+  }
+
+  return deferred.promise
+}
+
+export default gong
