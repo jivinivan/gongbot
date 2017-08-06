@@ -1,7 +1,7 @@
 {
-  "name": "gongbot",
+  "name": "GongBot",
   "version": "1.0.0",
-  "description": "pi-node-relay =============",
+  "description": "",
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,7 +10,9 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.15.3",
+    "johnny-five": "^0.11.3",
     "pi-blaster.js": "^0.1.1",
+    "pi-io": "0.5.0",
     "q": "^1.5.0",
     "servoblaster": "^0.1.1"
   }

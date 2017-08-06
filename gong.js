@@ -1,82 +1,94 @@
-import piblaster from 'pi-blaster.js'
-import Q from 'q'
+'use strict';
+var five = require('johnny-five');
+var PiIO = require('pi-io');
+var Q = require('q');
+var servoInstance = null;
 
-// Settings
-const servoTimePer60Degrees = 155 // milliseconds
-const servo0 = 0.05
-const servo180 = 0.25
-const servoDegreePulse = (servo180-servo0) / 180
-const servoDegreeTime = servoTimePer60Degrees / 60 //milliseconds
-const incrementDivisor = 0.001
-const pin = 18
+/**
+ * Gong class
+ *
+ * @constructor
+ */
+function Gong() {
+  if (!servoInstance) {
+    servoInstance = this;
 
-const _move = (start, stop, delayCount, delayTime, granularity, direction, deferred) => {
-
-  // Determin next position
-  let pwm
-  if(direction === 'up') {
-    pwm = (parseFloat(start) + parseFloat(granularity))
-    pwm = (pwm > stop) ? stop : pwm
-  }else{
-    pwm = (parseFloat(start) - parseFloat(granularity))
-    pwm = (pwm < stop) ? stop : pwm
+    this.pin = 'GPIO27';
+    this.upTime = 3000;
+    this.gongActive = false;
+    this.board = null;
+    this.servo = null;
+    this.animation = null;
   }
-
-  // Set next position
-  piblaster.setPwm(pin, pwm)
-  console.log('position', pwm)
-
-  // Wait for servo to reach next position position
-  setTimeout(() => {
-    if (pwm === stop) {
-      deferred.resolve()
-    }
-    else {
-      // Keep iterating if we haven't reached the iteration limit
-      return _move(pwm, stop, delayCount, delayTime, granularity, direction, deferred)
-    }
-  }, delayTime)
+  return servoInstance;
 }
 
-const gong = (start, stop, time) => {
+/**
+ * Initialize Raspberry Pi and servo
+ */
+Gong.prototype.initialize = function () {
+  var deferred = Q.defer();
 
-  const degrees = Math.abs(start-stop) / servoDegreePulse // total degrees of movement
-  const degreeTime = time / degrees // time per degree
-  const extraTime = 2000 - (servoDegreeTime * degrees) // extra time past max servo speed
-  const delayCount = Math.ceil( Math.abs(start-stop) / incrementDivisor ) // number of delays to use
-  const delayTime = extraTime / delayCount // delay time
-  const granularity = Math.abs(start-stop) / delayCount
-  const direction = (start > stop) ? 'down' : 'up'
-  const deferred = Q.defer()
-
-  console.log('direction', direction)
-
-  if(degreeTime > servoDegreeTime) {
-    console.log('using delays')
-
-    // Go to position 1
-    piblaster.setPwm(pin, start)
-
-    // Start delay sequence
-    _move(start, stop, delayCount, delayTime, granularity, direction, deferred)
+  // Check to see if we already have a board and servo instance
+  if (this.board && this.servo) {
+    deferred.resolve();
   }
   else {
-    console.log('full speed ahead!')
+    // Create new board using Pi IO Plugin
+    this.board = new five.Board({
+      io: new PiIO(),
+      repl: false
+    });
 
-    // Go to position 1
-    piblaster.setPwm(pin, start)
+    // Once board is ready, create new servo instance
+    this.board.ready(function() {
+      this.servo = new five.Servo({
+        pin: this.pin,
+        type: 'standard'
+      });
 
-    // Go to position 2
-    piblaster.setPwm(pin, stop)
-
-    // Calculate the time it will take for full speed position change
-    var fullSpeedTime = (degrees * servoDegreeTime)
-    setTimeout(() => {
-      deferred.resolve()
-    }, fullSpeedTime)
+      deferred.resolve();
+    }.bind(this));
   }
 
-  return deferred.promise
-}
+  return deferred.promise;
+};
 
-export default gong
+/**
+ * Ring the gong!
+ */
+Gong.prototype.ring = function () {
+  // If gong is active, do not ring
+  if(this.active) return;
+
+  this.initialize()
+  .then(function() {
+    // Set gong status to active
+    this.active = true;
+
+    // Create animation
+    var animation = new five.Animation(this.servo);
+
+    // Add animation segment: Move gong arm up over 3 seconds
+    animation.enqueue({
+      duration: this.upTime,
+      keyFrames: [{ degrees: 180 }]
+    });
+
+    // Add animation segment: Move gong arm down quickly
+    animation.enqueue({
+      duration: 0,
+      keyFrames: [{ degrees: 0 }],
+      oncomplete: function() {
+        // Set gong status to false
+        this.active = false;
+      }.bind(this);
+    });
+
+    // Play the animation
+    animation.play();
+
+  }.bind(this));
+};
+
+module.exports = Gong;
